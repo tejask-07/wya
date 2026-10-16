@@ -4,6 +4,7 @@
 #include "raylib.h"
 #include "../network/Network.hpp"
 #include "../routing/Route.hpp"
+#include "../simulation/RouteDiscovery.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -157,6 +158,118 @@ private:
     }
 
 public:
+
+        void drawDiscovery(
+            const Network& network,
+            const DiscoveryFrame& frame,
+            int source,
+            int destination
+        ) const {
+            DrawText("NETWORK TOPOLOGY", 40, 175, 18, INK);
+            DrawText(
+                "ROUTE DISCOVERY IN PROGRESS",
+                40, 202, 14, MUTED
+            );
+
+            // Draw links and emphasize the edge currently being explored.
+            for (const auto& link : network.links) {
+                if (link.from < 0 || link.to < 0 ||
+                    link.from >= static_cast<int>(network.nodes.size()) ||
+                    link.to >= static_cast<int>(network.nodes.size())) {
+                    continue;
+                }
+
+                const auto& a = network.nodes[link.from];
+                const auto& b = network.nodes[link.to];
+
+                const bool activeEdge =
+                    (frame.activeFrom == link.from &&
+                    frame.activeTo == link.to) ||
+                    (frame.activeFrom == link.to &&
+                    frame.activeTo == link.from);
+
+                const Color color = !link.active
+                    ? FAILED_COLOR
+                    : (activeEdge ? ROUTE_COLOR : LINK_COLOR);
+
+                DrawLineEx(
+                    {a.x, a.y},
+                    {b.x, b.y},
+                    activeEdge ? 5.0f : 2.5f,
+                    color
+                );
+
+                const int midX = static_cast<int>((a.x + b.x) / 2);
+                const int midY = static_cast<int>((a.y + b.y) / 2);
+
+                const std::string cost =
+                    std::to_string(static_cast<int>(link.cost));
+
+                DrawCircle(midX, midY, 11, BACKGROUND);
+                DrawText(
+                    cost.c_str(),
+                    midX - MeasureText(cost.c_str(), 12) / 2,
+                    midY - 6,
+                    12,
+                    INK
+                );
+
+                if (!link.active) {
+                    DrawText("X", midX + 11, midY - 16, 16, FAILED_COLOR);
+                }
+            }
+
+            // Draw routers with their current tentative distance.
+            for (std::size_t i = 0; i < network.nodes.size(); ++i) {
+                const auto& node = network.nodes[i];
+                const int x = static_cast<int>(node.x);
+                const int y = static_cast<int>(node.y);
+
+                DrawCircle(x, y, NODE_RADIUS, NODE_FILL);
+                DrawCircleLines(x, y, NODE_RADIUS, INK);
+
+                const int labelWidth = MeasureText(node.label.c_str(), 16);
+                DrawText(
+                    node.label.c_str(),
+                    x - labelWidth / 2,
+                    y - 8,
+                    16,
+                    INK
+                );
+
+                if (i < frame.settled.size() && frame.settled[i]) {
+                    DrawCircleLines(x, y, NODE_RADIUS + 3, ROUTE_COLOR);
+                }
+
+                if (static_cast<int>(i) == source ||
+                    static_cast<int>(i) == destination) {
+                    DrawCircleLines(x, y, NODE_RADIUS + 7, ROUTE_COLOR);
+                }
+
+                if (i < frame.distance.size()) {
+                    const double cost = frame.distance[i];
+
+                    const std::string costText =
+                        std::isinf(cost) ? "INF" :
+                        std::to_string(static_cast<int>(cost));
+
+                    DrawText(
+                        costText.c_str(),
+                        x - MeasureText(costText.c_str(), 12) / 2,
+                        y + 30,
+                        12,
+                        MUTED
+                    );
+                }
+            }
+
+            DrawText(
+                TextFormat("DISCOVERY ROUND: %d", frame.round),
+                40, 230, 14, ROUTE_COLOR
+            );
+        }
+
+
     void handleInput(Network& network) {
         if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
             return;

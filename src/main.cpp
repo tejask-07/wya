@@ -10,6 +10,7 @@
 #include "visualization/NetworkRenderer.hpp"
 #include "visualization/RoutingTableRenderer.hpp"
 #include "visualization/PacketRenderer.hpp"
+#include "simulation/RouteDiscovery.hpp"
 
 #include <string>
 
@@ -26,12 +27,14 @@ int main() {
     RoutingTableRenderer tableRenderer;
     PacketRenderer packetRenderer;
     PacketSimulator packetSimulator;
+    RouteDiscovery routeDiscovery;
 
     constexpr int source = 0;       // R1
     constexpr int destination = 7;  // R8
 
     int selectedRouter = 0;
     bool useDistanceVector = false;
+    bool discoveryStarted = false;
 
     while (!WindowShouldClose()) {
         const float deltaTime = GetFrameTime();
@@ -48,9 +51,35 @@ int main() {
         if (IsKeyPressed(KEY_SEVEN)) selectedRouter = 6;
         if (IsKeyPressed(KEY_EIGHT)) selectedRouter = 7;
 
-        // Switch routing algorithm.
+        // Switch routing algorithm and invalidate the previous discovery.
         if (IsKeyPressed(KEY_TAB)) {
             useDistanceVector = !useDistanceVector;
+            discoveryStarted = false;
+        }
+
+        // R starts discovery. Shift+R restarts it.
+        if (IsKeyPressed(KEY_R)) {
+            const bool shiftHeld =
+                IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
+            if (shiftHeld && routeDiscovery.hasFrames()) {
+                routeDiscovery.restart();
+                discoveryStarted = true;
+            } else if (!shiftHeld) {
+                routeDiscovery.start(
+                    network,
+                    source,
+                    destination,
+                    useDistanceVector
+                        ? DiscoveryAlgorithm::DistanceVector
+                        : DiscoveryAlgorithm::LinkState
+                );
+                discoveryStarted = true;
+            }
+        }
+
+        if (discoveryStarted) {
+            routeDiscovery.update(deltaTime);
         }
 
         const RouteTable route = useDistanceVector
@@ -92,13 +121,28 @@ int main() {
             Color{112, 101, 89, 255}
         );
 
-        DrawText(
-            "SPACE: SEND PACKET",
-            42, 120, 15,
+       DrawText(
+            "R: RUN ROUTE   SHIFT+R: RESTART   SPACE: SEND PACKET",
+            42, 120, 14,
             Color{112, 101, 89, 255}
         );
 
-        renderer.draw(network, route, destination);
+        if (discoveryStarted) {
+        const DiscoveryFrame* frame = routeDiscovery.current();
+
+        if (frame != nullptr && !routeDiscovery.isComplete()) {
+            renderer.drawDiscovery(
+                network,
+                *frame,
+                source,
+                destination
+            );
+            } else {
+                renderer.draw(network, route, destination);
+            }
+        } else {
+            renderer.draw(network, route, destination);
+        }
 
         // Draw moving packets over the network links and nodes.
         packetRenderer.draw(
