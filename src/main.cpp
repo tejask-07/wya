@@ -6,11 +6,12 @@
 #include "routing/LinkState.hpp"
 
 #include "simulation/PacketSimulator.hpp"
+#include "simulation/RouteDiscovery.hpp"
 
 #include "visualization/NetworkRenderer.hpp"
 #include "visualization/RoutingTableRenderer.hpp"
 #include "visualization/PacketRenderer.hpp"
-#include "simulation/RouteDiscovery.hpp"
+#include "visualization/RoutingMetrics.hpp"
 
 #include <string>
 
@@ -28,6 +29,7 @@ int main() {
     PacketRenderer packetRenderer;
     PacketSimulator packetSimulator;
     RouteDiscovery routeDiscovery;
+    RoutingMetrics metricsRenderer;
 
     constexpr int source = 0;       // R1
     constexpr int destination = 7;  // R8
@@ -51,7 +53,7 @@ int main() {
         if (IsKeyPressed(KEY_SEVEN)) selectedRouter = 6;
         if (IsKeyPressed(KEY_EIGHT)) selectedRouter = 7;
 
-        // Switch routing algorithm and invalidate the previous discovery.
+        // Switch routing algorithm.
         if (IsKeyPressed(KEY_TAB)) {
             useDistanceVector = !useDistanceVector;
             discoveryStarted = false;
@@ -60,7 +62,8 @@ int main() {
         // R starts discovery. Shift+R restarts it.
         if (IsKeyPressed(KEY_R)) {
             const bool shiftHeld =
-                IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+                IsKeyDown(KEY_LEFT_SHIFT) ||
+                IsKeyDown(KEY_RIGHT_SHIFT);
 
             if (shiftHeld && routeDiscovery.hasFrames()) {
                 routeDiscovery.restart();
@@ -74,14 +77,17 @@ int main() {
                         ? DiscoveryAlgorithm::DistanceVector
                         : DiscoveryAlgorithm::LinkState
                 );
+
                 discoveryStarted = true;
             }
         }
 
+        // Advance discovery animation.
         if (discoveryStarted) {
             routeDiscovery.update(deltaTime);
         }
 
+        // Active algorithm: used for packet routing and route display.
         const RouteTable route = useDistanceVector
             ? DistanceVector::compute(network, source)
             : LinkState::compute(network, source);
@@ -89,6 +95,13 @@ int main() {
         const RouteTable tableRoute = useDistanceVector
             ? DistanceVector::compute(network, selectedRouter)
             : LinkState::compute(network, selectedRouter);
+
+        // Compute both algorithms for the comparison panel.
+        const RouteTable distanceVectorComparison =
+            DistanceVector::compute(network, source);
+
+        const RouteTable linkStateComparison =
+            LinkState::compute(network, source);
 
         const std::string algorithm = useDistanceVector
             ? "DISTANCE VECTOR"
@@ -103,8 +116,13 @@ int main() {
             );
         }
 
-        // Advance packet movement every frame.
-        packetSimulator.update(network, deltaTime,useDistanceVector);
+        // Advance packet movement using the selected algorithm
+        // if a link failure requires rerouting.
+        packetSimulator.update(
+            network,
+            deltaTime,
+            useDistanceVector
+        );
 
         BeginDrawing();
         ClearBackground(Color{255, 246, 234, 255});
@@ -121,22 +139,23 @@ int main() {
             Color{112, 101, 89, 255}
         );
 
-       DrawText(
+        DrawText(
             "R: RUN ROUTE   SHIFT+R: RESTART   SPACE: SEND PACKET",
             42, 120, 14,
             Color{112, 101, 89, 255}
         );
 
+        // Draw topology and route discovery.
         if (discoveryStarted) {
-        const DiscoveryFrame* frame = routeDiscovery.current();
+            const DiscoveryFrame* frame = routeDiscovery.current();
 
-        if (frame != nullptr && !routeDiscovery.isComplete()) {
-            renderer.drawDiscovery(
-                network,
-                *frame,
-                source,
-                destination
-            );
+            if (frame != nullptr && !routeDiscovery.isComplete()) {
+                renderer.drawDiscovery(
+                    network,
+                    *frame,
+                    source,
+                    destination
+                );
             } else {
                 renderer.draw(network, route, destination);
             }
@@ -144,17 +163,26 @@ int main() {
             renderer.draw(network, route, destination);
         }
 
-        // Draw moving packets over the network links and nodes.
+        // Draw moving packets over the network.
         packetRenderer.draw(
             network,
             packetSimulator.getPackets()
         );
 
+        // Current algorithm's routing table.
         tableRenderer.draw(
             network,
             tableRoute,
             selectedRouter,
             algorithm
+        );
+
+        // Compare both algorithms on the same topology.
+        metricsRenderer.draw(
+            network,
+            distanceVectorComparison,
+            linkStateComparison,
+            destination
         );
 
         // Packet status summary.
@@ -170,9 +198,11 @@ int main() {
                 case PacketStatus::InTransit:
                     ++inTransit;
                     break;
+
                 case PacketStatus::Delivered:
                     ++delivered;
                     break;
+
                 case PacketStatus::Failed:
                     ++failed;
                     break;
@@ -182,7 +212,9 @@ int main() {
         DrawText(
             TextFormat(
                 "PACKETS  IN TRANSIT: %d   DELIVERED: %d   FAILED: %d",
-                inTransit, delivered, failed
+                inTransit,
+                delivered,
+                failed
             ),
             40, screenHeight - 25, 15,
             Color{35, 32, 29, 255}
