@@ -3,6 +3,9 @@
 #include "network/Network.hpp"
 #include "visualization/NetworkRenderer.hpp"
 
+#include "routing/DistanceVector.hpp"
+#include "routing/LinkState.hpp"
+
 int main() {
     constexpr int screenWidth = 1440;
     constexpr int screenHeight = 900;
@@ -12,6 +15,15 @@ int main() {
 
     Network network;
     NetworkRenderer renderer;
+
+    const auto dv = DistanceVector::compute(network, 0);
+    const auto ls = LinkState::compute(network, 0);
+
+    TraceLog(LOG_INFO, "DISTANCE VECTOR: R1 -> R8 cost = %.1f",
+            dv.distance[7]);
+
+    TraceLog(LOG_INFO, "LINK STATE: R1 -> R8 cost = %.1f",
+            ls.distance[7]);
 
     while (!WindowShouldClose()) {
         renderer.handleInput(network);
