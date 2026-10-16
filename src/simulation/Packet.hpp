@@ -28,6 +28,8 @@ struct Packet {
     // Movement speed, in normalized segments per second.
     float speed = 0.8f;
 
+    bool returningToRouter = false;
+
     PacketStatus status = PacketStatus::Queued;
 
     Packet() = default;

@@ -104,7 +104,7 @@ int main() {
         }
 
         // Advance packet movement every frame.
-        packetSimulator.update(network, deltaTime);
+        packetSimulator.update(network, deltaTime,useDistanceVector);
 
         BeginDrawing();
         ClearBackground(Color{255, 246, 234, 255});
