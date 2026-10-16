@@ -2,9 +2,12 @@
 
 #include "network/Network.hpp"
 #include "visualization/NetworkRenderer.hpp"
+#include "visualization/RoutingTableRenderer.hpp"
 
 #include "routing/DistanceVector.hpp"
 #include "routing/LinkState.hpp"
+
+#include <string>
 
 int main() {
     constexpr int screenWidth = 1440;
@@ -15,36 +18,69 @@ int main() {
 
     Network network;
     NetworkRenderer renderer;
+    RoutingTableRenderer tableRenderer;
 
-    const auto dv = DistanceVector::compute(network, 0);
-    const auto ls = LinkState::compute(network, 0);
+    constexpr int source = 0;       // R1
+    constexpr int destination = 7;  // R8
 
-    // TraceLog(LOG_INFO, "DISTANCE VECTOR: R1 -> R8 cost = %.1f",
-    //         dv.distance[7]);
+    int selectedRouter = 0;
+    bool useDistanceVector = false;
 
-    // TraceLog(LOG_INFO, "LINK STATE: R1 -> R8 cost = %.1f",
-    //         ls.distance[7]);
+    while (!WindowShouldClose()) {
+        renderer.handleInput(network);
 
-   while (!WindowShouldClose()) {
-    renderer.handleInput(network);
+        // Select a router for its routing table.
+        if (IsKeyPressed(KEY_ONE))   selectedRouter = 0;
+        if (IsKeyPressed(KEY_TWO))   selectedRouter = 1;
+        if (IsKeyPressed(KEY_THREE)) selectedRouter = 2;
+        if (IsKeyPressed(KEY_FOUR))  selectedRouter = 3;
+        if (IsKeyPressed(KEY_FIVE))  selectedRouter = 4;
+        if (IsKeyPressed(KEY_SIX))   selectedRouter = 5;
+        if (IsKeyPressed(KEY_SEVEN)) selectedRouter = 6;
+        if (IsKeyPressed(KEY_EIGHT)) selectedRouter = 7;
 
-    const int source = 0;       // R1
-    const int destination = 7;  // R8
+        // Switch the active routing algorithm.
+        if (IsKeyPressed(KEY_TAB)) {
+            useDistanceVector = !useDistanceVector;
+        }
 
-    const RouteTable route = LinkState::compute(network, source);
+        const RouteTable route = useDistanceVector
+            ? DistanceVector::compute(network, source)
+            : LinkState::compute(network, source);
 
-    BeginDrawing();
-    ClearBackground(Color{255, 246, 234, 255});
+        const RouteTable tableRoute = useDistanceVector
+            ? DistanceVector::compute(network, selectedRouter)
+            : LinkState::compute(network, selectedRouter);
 
-    DrawText("ROUTING ARENA", 40, 35, 36,
-             Color{35, 32, 29, 255});
+        const std::string algorithm = useDistanceVector
+            ? "DISTANCE VECTOR"
+            : "LINK STATE / DIJKSTRA";
 
-    DrawText("DISTANCE VECTOR  VS  LINK STATE", 42, 85, 20,
-             Color{112, 101, 89, 255});
+        BeginDrawing();
+        ClearBackground(Color{255, 246, 234, 255});
 
-    renderer.draw(network, route, destination);
+        DrawText(
+            "ROUTING ARENA",
+            40, 35, 36,
+            Color{35, 32, 29, 255}
+        );
 
-    EndDrawing();
+        DrawText(
+            "DISTANCE VECTOR  VS  LINK STATE",
+            42, 85, 20,
+            Color{112, 101, 89, 255}
+        );
+
+        renderer.draw(network, route, destination);
+
+        tableRenderer.draw(
+            network,
+            tableRoute,
+            selectedRouter,
+            algorithm
+        );
+
+        EndDrawing();
     }
 
     CloseWindow();
