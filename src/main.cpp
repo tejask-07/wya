@@ -1,20 +1,31 @@
-
 #include "raylib.h"
 
+#include "network/Network.hpp"
+#include "visualization/NetworkRenderer.hpp"
+
 int main() {
-    constexpr int screenWidth = 1100;
-    constexpr int screenHeight = 700;
+    constexpr int screenWidth = 1440;
+    constexpr int screenHeight = 900;
 
     InitWindow(screenWidth, screenHeight, "ROUTING ARENA");
     SetTargetFPS(60);
 
-    while (!WindowShouldClose()) {
-        BeginDrawing();
-        ClearBackground(Color{15, 18, 28, 255});
+    Network network;
+    NetworkRenderer renderer;
 
-        DrawText("ROUTING ARENA", 40, 35, 36, RAYWHITE);
-        DrawText("Distance Vector  vs  Link State", 42, 85, 20, LIGHTGRAY);
-        DrawText("Network simulation initializing...", 42, 140, 18, GRAY);
+    while (!WindowShouldClose()) {
+        renderer.handleInput(network);
+
+        BeginDrawing();
+        ClearBackground(Color{255, 246, 234, 255});
+
+        DrawText("ROUTING ARENA", 40, 35, 36, Color{35, 32, 29, 255});
+        DrawText(
+            "DISTANCE VECTOR  VS  LINK STATE",
+            42, 85, 20, Color{112, 101, 89, 255}
+        );
+
+        renderer.draw(network);
 
         EndDrawing();
     }
