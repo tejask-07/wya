@@ -3,22 +3,25 @@
 
 #include "raylib.h"
 #include "../network/Network.hpp"
+#include "../routing/Route.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
+#include <sstream>
 #include <string>
+#include <vector>
 
 class NetworkRenderer {
 private:
     static constexpr float NODE_RADIUS = 25.0f;
 
-    // Warm editorial palette
     static constexpr Color BACKGROUND = {255, 246, 234, 255};
-    static constexpr Color GRID_COLOR = {239, 228, 212, 255};
     static constexpr Color INK = {35, 32, 29, 255};
     static constexpr Color MUTED = {112, 101, 89, 255};
     static constexpr Color NODE_FILL = {255, 251, 245, 255};
     static constexpr Color LINK_COLOR = {35, 32, 29, 255};
+    static constexpr Color ROUTE_COLOR = {35, 145, 100, 255};
     static constexpr Color FAILED_COLOR = {225, 55, 70, 255};
 
     bool isNearLink(Vector2 mouse, Vector2 a, Vector2 b) const {
@@ -44,14 +47,113 @@ private:
         return std::sqrt(diffX * diffX + diffY * diffY) < 10.0f;
     }
 
-    void drawGrid() const {
-        for (int x = 0; x < GetScreenWidth(); x += 32) {
-            DrawLine(x, 0, x, GetScreenHeight(), GRID_COLOR);
+    bool isRouteLink(
+        const RouteTable& route,
+        int from,
+        int to,
+        int destination
+    ) const {
+        const auto path = route.pathTo(destination);
+
+        for (std::size_t i = 1; i < path.size(); ++i) {
+            if ((path[i - 1] == from && path[i] == to) ||
+                (path[i - 1] == to && path[i] == from)) {
+                return true;
+            }
         }
 
-        for (int y = 0; y < GetScreenHeight(); y += 32) {
-            DrawLine(0, y, GetScreenWidth(), y, GRID_COLOR);
+        return false;
+    }
+
+    void drawRoutePanel(
+        const Network& network,
+        const RouteTable& route,
+        int destination
+    ) const {
+        const int panelX = 40;
+        const int panelY = GetScreenHeight() - 205;
+        const int panelW = 430;
+        const int panelH = 165;
+
+        // Warm panel, slightly darker than the canvas.
+        DrawRectangle(
+            panelX, panelY, panelW, panelH,
+            Color{249, 237, 220, 255}
+        );
+
+        DrawRectangleLines(
+            panelX, panelY, panelW, panelH,
+            Color{220, 207, 188, 255}
+        );
+
+        DrawText("ROUTE ANALYSIS", panelX + 18, panelY + 14, 18, INK);
+
+        DrawLine(
+            panelX + 18, panelY + 42,
+            panelX + panelW - 18, panelY + 42,
+            Color{220, 207, 188, 255}
+        );
+
+        if (route.source < 0 ||
+            route.source >= static_cast<int>(network.nodes.size()) ||
+            destination < 0 ||
+            destination >= static_cast<int>(network.nodes.size())) {
+            DrawText(
+                "INVALID ROUTE ENDPOINT",
+                panelX + 18, panelY + 58, 16, FAILED_COLOR
+            );
+            return;
         }
+
+        DrawText("SOURCE", panelX + 18, panelY + 54, 12, MUTED);
+        DrawText(
+            network.nodes[route.source].label.c_str(),
+            panelX + 18, panelY + 72, 18, INK
+        );
+
+        DrawText("DESTINATION", panelX + 140, panelY + 54, 12, MUTED);
+        DrawText(
+            network.nodes[destination].label.c_str(),
+            panelX + 140, panelY + 72, 18, INK
+        );
+
+        DrawText("SHORTEST PATH", panelX + 18, panelY + 103, 12, MUTED);
+
+        if (!route.reachable(destination)) {
+            DrawText(
+                "DESTINATION UNREACHABLE",
+                panelX + 18, panelY + 123, 16, FAILED_COLOR
+            );
+            return;
+        }
+
+        const auto path = route.pathTo(destination);
+
+        std::string pathText;
+
+        for (std::size_t i = 0; i < path.size(); ++i) {
+            if (i > 0) {
+                pathText += " > ";
+            }
+
+            pathText += network.nodes[path[i]].label;
+        }
+
+        DrawText(
+            pathText.c_str(),
+            panelX + 18, panelY + 122, 16, ROUTE_COLOR
+        );
+
+        std::ostringstream costStream;
+        costStream << std::fixed << std::setprecision(1)
+                << route.distance[destination];
+
+        const std::string costText = "TOTAL COST  " + costStream.str();
+
+        DrawText(
+            costText.c_str(),
+            panelX + 18, panelY + 143, 16, INK
+        );
     }
 
 public:
@@ -63,6 +165,12 @@ public:
         const Vector2 mouse = GetMousePosition();
 
         for (auto& link : network.links) {
+            if (link.from < 0 || link.to < 0 ||
+                link.from >= static_cast<int>(network.nodes.size()) ||
+                link.to >= static_cast<int>(network.nodes.size())) {
+                continue;
+            }
+
             const auto& a = network.nodes[link.from];
             const auto& b = network.nodes[link.to];
 
@@ -73,39 +181,46 @@ public:
         }
     }
 
-    void draw(const Network& network) const {
-        // Background details
-        // drawGrid();
-
-        // Section heading
+    void draw(
+        const Network& network,
+        const RouteTable& route,
+        int destination
+    ) const {
         DrawText("NETWORK TOPOLOGY", 40, 175, 18, INK);
         DrawText(
-            "SELECT A LINK TO TOGGLE ITS STATUS",
+            "CLICK A LINK TO FAIL / RESTORE IT",
             40, 202, 14, MUTED
         );
-            
-        // Draw links first so nodes appear above them
+
+        // Links first, so the routers appear above them.
         for (const auto& link : network.links) {
+            if (link.from < 0 || link.to < 0 ||
+                link.from >= static_cast<int>(network.nodes.size()) ||
+                link.to >= static_cast<int>(network.nodes.size())) {
+                continue;
+            }
+
             const auto& a = network.nodes[link.from];
             const auto& b = network.nodes[link.to];
 
             const Vector2 start = {a.x, a.y};
             const Vector2 end = {b.x, b.y};
 
-            const Color color = link.active
-                ? LINK_COLOR
-                : FAILED_COLOR;
+            const bool onRoute = link.active &&
+                isRouteLink(route, link.from, link.to, destination);
 
-            DrawLineEx(start, end, 2.5f, color);
+            const Color color = !link.active
+                ? FAILED_COLOR
+                : (onRoute ? ROUTE_COLOR : LINK_COLOR);
+
+            DrawLineEx(start, end, onRoute ? 5.0f : 2.5f, color);
 
             const int midX = static_cast<int>((a.x + b.x) / 2);
             const int midY = static_cast<int>((a.y + b.y) / 2);
 
-            const std::string cost = std::to_string(
-                static_cast<int>(link.cost)
-            );
+            const std::string cost =
+                std::to_string(static_cast<int>(link.cost));
 
-            // Cost badge matches the warm canvas
             DrawCircle(midX, midY, 11, BACKGROUND);
 
             const int textWidth = MeasureText(cost.c_str(), 12);
@@ -122,18 +237,17 @@ public:
             }
         }
 
-        // Draw routers
-        for (const auto& node : network.nodes) {
+        // Routers and selected endpoints.
+        for (std::size_t i = 0; i < network.nodes.size(); ++i) {
+            const auto& node = network.nodes[i];
+
             const int x = static_cast<int>(node.x);
             const int y = static_cast<int>(node.y);
 
             DrawCircle(x, y, NODE_RADIUS, NODE_FILL);
             DrawCircleLines(x, y, NODE_RADIUS, INK);
 
-            const int labelWidth = MeasureText(
-                node.label.c_str(), 16
-            );
-
+            const int labelWidth = MeasureText(node.label.c_str(), 16);
             DrawText(
                 node.label.c_str(),
                 x - labelWidth / 2,
@@ -141,6 +255,18 @@ public:
                 16,
                 INK
             );
+
+            if (static_cast<int>(i) == route.source) {
+                DrawCircleLines(x, y, NODE_RADIUS + 4, ROUTE_COLOR);
+                DrawCircleLines(x, y, NODE_RADIUS + 7, ROUTE_COLOR);
+            }
+
+            if (static_cast<int>(i) == destination) {
+                DrawCircleLines(x, y, NODE_RADIUS + 4, ROUTE_COLOR);
+                DrawCircleLines(x, y, NODE_RADIUS + 7, ROUTE_COLOR);
+            }
         }
+
+        drawRoutePanel(network, route, destination);
     }
 };

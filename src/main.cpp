@@ -19,27 +19,32 @@ int main() {
     const auto dv = DistanceVector::compute(network, 0);
     const auto ls = LinkState::compute(network, 0);
 
-    TraceLog(LOG_INFO, "DISTANCE VECTOR: R1 -> R8 cost = %.1f",
-            dv.distance[7]);
+    // TraceLog(LOG_INFO, "DISTANCE VECTOR: R1 -> R8 cost = %.1f",
+    //         dv.distance[7]);
 
-    TraceLog(LOG_INFO, "LINK STATE: R1 -> R8 cost = %.1f",
-            ls.distance[7]);
+    // TraceLog(LOG_INFO, "LINK STATE: R1 -> R8 cost = %.1f",
+    //         ls.distance[7]);
 
-    while (!WindowShouldClose()) {
-        renderer.handleInput(network);
+   while (!WindowShouldClose()) {
+    renderer.handleInput(network);
 
-        BeginDrawing();
-        ClearBackground(Color{255, 246, 234, 255});
+    const int source = 0;       // R1
+    const int destination = 7;  // R8
 
-        DrawText("ROUTING ARENA", 40, 35, 36, Color{35, 32, 29, 255});
-        DrawText(
-            "DISTANCE VECTOR  VS  LINK STATE",
-            42, 85, 20, Color{112, 101, 89, 255}
-        );
+    const RouteTable route = LinkState::compute(network, source);
 
-        renderer.draw(network);
+    BeginDrawing();
+    ClearBackground(Color{255, 246, 234, 255});
 
-        EndDrawing();
+    DrawText("ROUTING ARENA", 40, 35, 36,
+             Color{35, 32, 29, 255});
+
+    DrawText("DISTANCE VECTOR  VS  LINK STATE", 42, 85, 20,
+             Color{112, 101, 89, 255});
+
+    renderer.draw(network, route, destination);
+
+    EndDrawing();
     }
 
     CloseWindow();
